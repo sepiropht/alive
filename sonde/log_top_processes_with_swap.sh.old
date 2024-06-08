@@ -1,0 +1,54 @@
+#!/bin/bash
+
+LOG_DIR="/database"
+DB_FILE="$LOG_DIR/top_processes.db"
+INTERVAL=10  # in seconds
+
+mkdir -p "$LOG_DIR"
+
+# Create SQLite table if it doesn't exist
+sqlite3 "$DB_FILE" <<EOF
+CREATE TABLE IF NOT EXISTS top_processes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp INTEGER,
+    pid INTEGER,
+    command TEXT,
+    cpu REAL,
+    mem REAL
+);
+EOF
+
+while true; do
+    TIMESTAMP=$(date +%s)
+    
+    # Get the top 5 processes by CPU usage
+    CPU_OUTPUT=$(ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 21 | tail -n 20)
+
+    MEM_OUTPUT=$(ps -eo pid,comm,%cpu,%mem --sort=-%mem | head -n 21 | tail -n +2)
+
+
+    for row in "$CPU_OUTPUT"; do
+        pid=$(echo $row | awk '{print $1}')
+        command=$(echo $row | awk '{print $2}')
+        cpu=$(echo $row | awk '{print $3}')
+        mem=$(echo $row | awk '{print $4}')
+
+        sqlite3 "$DB_FILE" <<EOF
+INSERT INTO top_processes (timestamp, pid, command, cpu, mem)
+VALUES ($TIMESTAMP, $pid, '$command', $cpu, $mem);
+
+for row in "$MEM_OUTPUT"; do
+        pid=$(echo $row | awk '{print $1}')
+        command=$(echo $row | awk '{print $2}')
+        cpu=$(echo $row | awk '{print $3}')
+        mem=$(echo $row | awk '{print $4}')
+
+        sqlite3 "$DB_FILE" <<EOF
+INSERT INTO top_processes (timestamp, pid, command, cpu, mem)
+VALUES ($TIMESTAMP, $pid, '$command', $cpu, $mem);
+EOF
+    done
+
+    sleep "$INTERVAL"
+done
+
